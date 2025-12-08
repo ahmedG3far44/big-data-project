@@ -1,0 +1,69 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+
+# Bytecode cache
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints/
+*.ipynb_convert/
+*.nbconvert/
+
+# Notebook outputs (optional, but helpful in ETL projects)
+*.html
+*.pdf
+
+# --- Data files ---
+# If you're generating or loading datasets locally, ignore them
+data/
+*.csv
+*.parquet
+*.json
+*.xls
+*.xlsx
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Local environment files ---
+.env
+.env.*
+*.env
+*.ini
+
+# --- Docker ---
+# Keep docker-compose.yml, ignore the rest
+docker-data/
+*.pid
+
+# --- OS-specific ---
+# Windows
+Thumbs.db
+desktop.ini
+
+# macOS
+.DS_Store
+
+# --- IDE / Editor ---
+# VSCode
+.vscode/
+.history/
+*.code-workspace
+
+# PyCharm
+.idea/
+
+# --- Misc ---
+*.tmp
+*.bak
