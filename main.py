@@ -91,102 +91,160 @@ class DataLakeManager:
         self.log_message("Upload successful.")
 
 
+    
+    def clean_traffic_data(df: pd.DataFrame):
+        df['traffic_id'].fillna(-1, inplace=True)
+        df.drop_duplicates(subset=df.columns.difference(['traffic_id']), keep='first', inplace=True)
+        df = df[df['traffic_id'] != -1].copy()
+        df['traffic_id'] = pd.to_numeric(df['traffic_id'], errors='coerce').astype('Int64')
+        df = clean_date_time(df, 'date_time')
+        df['city'].fillna('London', inplace=True)
+        df['city'] = df['city'].astype(str).str.strip()
+        df = df[df['city'].isin(['London'])].copy()
+
+        standard_areas = ['Camden', 'Chelsea', 'Islington', 'Southwark', 'Kensington']
+        df['area'] = df['area'].astype(str).str.strip().str.title()
+        
+        mode_area = df['area'].mode()[0] if not df['area'].mode().empty else 'Unknown'
+        
+        df['area'] = np.where(
+            ~df['area'].isin(standard_areas),
+            mode_area, 
+            df['area']
+        )
+        df['area'].replace({'Nan': mode_area}, inplace=True) 
+        df['area'] = df['area'].astype('category')
+
+        num_cols_specs = [
+            ('vehicle_count', 0, 10000, 'int'), 
+            ('avg_speed_kmh', 3.0, 120.0, 'float'),
+            ('accident_count', 0, 20, 'int'),  
+            ('visibility_m', 50, 10000, 'int')
+        ]
+
+        for col, min_val, max_val, dtype_name in num_cols_specs:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            df[col] = np.where(df[col] < min_val, min_val, df[col])
+            df[col] = np.where(df[col] > max_val, max_val, df[col])
+            median_val = df[col].median()
+            df[col].fillna(median_val, inplace=True)
+            
+            if dtype_name == 'int':
+                df[col] = df[col].astype('Int64')
+            elif dtype_name == 'float':
+                df[col] = df[col].astype(float)
+
+        standard_levels = ['Low', 'Medium', 'High']
+        df['congestion_level'].fillna(df['congestion_level'].mode()[0], inplace=True) # Impute NULLs with mode
+
+        df['congestion_level'] = np.where(
+            ~df['congestion_level'].isin(standard_levels),
+            df['congestion_level'].mode()[0],
+            df['congestion_level']
+        )
+        df['congestion_level'] = df['congestion_level'].astype('category')
+
+        standard_conditions = ['Dry', 'Wet', 'Snowy', 'Damaged']
+        df['road_condition'].fillna(df['road_condition'].mode()[0], inplace=True) # Impute NULLs with mode
+
+        df['road_condition'] = np.where(
+            ~df['road_condition'].isin(standard_conditions),
+            df['road_condition'].mode()[0],
+            df['road_condition']
+        )
+        df['road_condition'] = df['road_condition'].astype('category')
+        df['date_time'] = pd.to_datetime(df['date_time'])
+
+        print("Traffic data cleaning complete.")
+        return df
+    
+    def clean_weather_data(df: pd.DataFrame):   
+        df['weather_id'].fillna(-1, inplace=True)
+        df.drop_duplicates(subset=df.columns.difference(['weather_id']), keep='first', inplace=True)
+        df = df[df['weather_id'] != -1].copy()
+        df['weather_id'] = pd.to_numeric(df['weather_id'], errors='coerce').astype('Int64')
+        df = clean_date_time(df, 'date_time')
+        df['city'].fillna('London', inplace=True)
+        df['city'] = df['city'].astype(str).str.strip()
+        df = df[df['city'].isin(['London'])].copy() 
+        df['date_time_dt'] = pd.to_datetime(df['date_time'])
+    
+        def get_season(dt):
+            month = dt.month
+            if 3 <= month <= 5: return 'Spring'
+            elif 6 <= month <= 8: return 'Summer'
+            elif 9 <= month <= 11: return 'Autumn'
+            else: return 'Winter'
+            
+        df['season'] = df['date_time_dt'].apply(get_season).astype('category')
+        df.drop(columns=['date_time_dt'], inplace=True)
+        num_cols_specs = [
+            ('temperature_c', 5.0, 35.0, 'float'),
+            ('humidity', 20, 100, 'int'),      
+            ('rain_mm', 0.0, 100.0, 'float'),  
+            ('wind_speed_kmh', 0.0, 80.0, 'float'), 
+            ('visibility_m', 50, 50000, 'int') 
+        ]
+        
+        for col, min_val, max_val, dtype_name in num_cols_specs:
+        
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            df[col] = np.where(df[col] < min_val, min_val, df[col])
+            df[col] = np.where(df[col] > max_val, max_val, df[col])
+            median_val = df[col].median()
+            df[col].fillna(median_val, inplace=True)
+            if dtype_name == 'int':
+                df[col] = df[col].astype('Int64')
+            elif dtype_name == 'float':
+                df[col] = df[col].astype(float)
+
+        if 'air_pressure_hpa' not in df.columns:
+            df['air_pressure_hpa'] = np.nan 
+
+        col = 'air_pressure_hpa'
+        min_val, max_val = 950.0, 1050.0
+        
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+        df[col] = np.where(df[col] < min_val, min_val, df[col])
+        df[col] = np.where(df[col] > max_val, max_val, df[col])
+        df[col].fillna(1000.0, inplace=True)
+        df[col] = df[col].astype(float)
+        
+        standard_conditions = ['Clear', 'Rain', 'Fog', 'Storm', 'Snow']
+        df['weather_condition'] = df['weather_condition'].astype(str).str.strip().str.title()
+        df['weather_condition'] = np.where(
+            ~df['weather_condition'].isin(standard_conditions), 
+            'Other', 
+            df['weather_condition']
+        )
+        df['weather_condition'].replace({'Other': 'Clear', 'Nan': 'Clear'}, inplace=True)
+        df['weather_condition'] = df['weather_condition'].astype('category')
+        df['date_time'] = pd.to_datetime(df['date_time'])
+        print("Weather data cleaning complete.")
+        return df
+    
+
+    def merge_date_city(df_weather, df_traffic):
+        df_weather = df_weather.copy()
+        df_traffic = df_traffic.copy()
+        df_weather['date_time'] = pd.to_datetime(df_weather['date_time'])
+        df_traffic['date_time'] = pd.to_datetime(df_traffic['date_time'])
+        traffic_subset = df_traffic[['date_time', 'city']]
+        merged_df = pd.merge(
+            df_weather,
+            traffic_subset,
+            on=['date_time', 'city'],
+            how='left'
+        )
+        return merged_df
+    
+    def create_silver_layer(self):
+        self.log_message("Creating silver layer...")
+        self.log_message("Silver layer created.")   
+
     def run_etl_pipeline(self):
         self.log_message("Starting ETL Pipeline...")
-        
-       
-        """Clean raw CSV files and create silver layer"""
-        # Weather cleaning
-        weather_clean = """
-        COPY (
-            SELECT 
-                    CAST(weather_id AS INTEGER) as weather_id,
-                    CAST(temperature_c AS DOUBLE) as temperature_c,
-                    CASE 
-                        WHEN date_time LIKE '%/%' THEN NULL 
-                        ELSE CAST(date_time AS TIMESTAMP) 
-                    END as date_time,
-                    CAST(humidity AS INTEGER) as humidity,
-                    CAST(rain_mm AS DOUBLE) as rain_mm,
-                    NULLIF(season, '') as season,
-                    CAST(wind_speed_kmh AS DOUBLE) as wind_speed_kmh,
-                    CAST(visibility_m AS INTEGER) as visibility_m,
-                    NULLIF(weather_condition, 'nan') as weather_condition,
-                    CAST(air_pressure_hpa AS DOUBLE) as air_pressure_hpa,
-                    TRIM(city) as city
-                FROM read_csv('s3://bronze/raw_weather.csv')
-                WHERE temperature_c IS NOT NULL
-            ) TO 's3://silver/clean_weather.parquet' (FORMAT 'PARQUET')
-            """
-
-        # Traffic cleaning
-        traffic_clean = """
-        COPY (
-            SELECT 
-                    CAST(traffic_id AS INTEGER) as traffic_id,
-                    TRIM(area) as area,
-                    REPLACE(date_time, 'T', ' ')::TIMESTAMP as date_time,
-                    CAST(vehicle_count AS INTEGER) as vehicle_count,
-                    CAST(avg_speed_kmh AS DOUBLE) as avg_speed_kmh,
-                    CAST(accident_count AS INTEGER) as accident_count,
-                    NULLIF(congestion_level, '') as congestion_level,
-                    NULLIF(road_condition, 'nan') as road_condition,
-                    CAST(visibility_m AS INTEGER) as visibility_m,
-                    TRIM(city) as city
-                FROM read_csv('s3://bronze/raw_traffic.csv')
-                WHERE date_time IS NOT NULL
-            ) TO 's3://silver/clean_traffic.parquet' (FORMAT 'PARQUET')
-            """
-        self.con.execute(weather_clean)
-        self.con.execute(traffic_clean)
-
-        # def apply_monti_carlo(self):
-        #     print("Monti Carlo")
-        # def apply_factor_analysis(self):
-        #     print("Factor Analysis")
-
-
-     
-        """Create aggregated gold layer tables"""
-        # Weather summary
-        weather_summary = """
-        COPY (
-            SELECT 
-                    city,
-                    season,
-                    COUNT(*) as records_count,
-                    ROUND(AVG(temperature_c), 2) as avg_temperature,
-                    ROUND(AVG(humidity), 2) as avg_humidity,
-                    ROUND(SUM(rain_mm), 2) as total_rainfall,
-                    MODE(weather_condition) as most_common_condition
-                FROM 's3://silver/clean_weather.parquet'
-                WHERE season IS NOT NULL
-                GROUP BY city, season
-            ) TO 's3://gold/weather_summary.parquet' (FORMAT 'PARQUET')
-            """
-
-        # Traffic summary
-        traffic_summary = """
-        COPY (
-                SELECT 
-                    area,
-                    road_condition,
-                    COUNT(*) as records_count,
-                    SUM(vehicle_count) as total_vehicles,
-                    ROUND(AVG(avg_speed_kmh), 2) as avg_speed,
-                    SUM(accident_count) as total_accidents
-                FROM 's3://myfolioappbucket/silver/clean_traffic.parquet'
-                WHERE road_condition IS NOT NULL
-                GROUP BY area, road_condition
-            ) TO 's3://myfolioappbucket/gold/traffic_summary.parquet' (FORMAT 'PARQUET')
-            """
-
-        self.con.execute(weather_summary)
-        self.con.execute(traffic_summary)
-
-
         self.log_message("ETL Pipeline completed.")
-
 
 
 def generate_weather_data(n_rows: int = 5000, city: str = "London"):
@@ -616,39 +674,25 @@ def generate_traffic_data(n_rows: int = 5000, city: str = "London"):
     return df
 
 
-def generate_messy_data(rows=1000):
-    ids = list(range(1, rows + 1))
-    ids += ids[: int(rows * 0.1)]
-    random.shuffle(ids)
-
-    data = {
-        "transaction_id": ids,
-        "customer_name": [
-            random.choice(["Alice", " bob ", None, "Charlie", "dAvId", ""]) for _ in ids
-        ],
-        "amount": [
-            random.choice([10.5, 200.0, None, 50000.0, "invalid", 15.0]) for _ in ids
-        ],
-        "transaction_date": [
-            datetime.now() - timedelta(days=random.randint(0, 100)) for _ in ids
-        ],
-    }
-
-    df = pd.DataFrame(data)
-    df["amount"] = df["amount"].astype(str)
-    return df
-
-
 MINIO_URL = "http://localhost:9000"
 
 lake = DataLakeManager(MINIO_URL, "root", "root442002")
 
-df = generate_messy_data(500)
 weather_df = generate_weather_data(n_rows=500)
 traffic_df = generate_traffic_data(n_rows=500)
 
-lake.upload_data(df, "bronze", "raw_transactions.csv")
+print(weather_df.head())
+print(traffic_df.head())
+
 lake.upload_data(weather_df, "bronze", "raw_weather.csv")
 lake.upload_data(traffic_df, "bronze", "raw_traffic.csv")
 
+
+cleaned_data_traffic = lake.clean_traffic_data(traffic_df)
+cleaned_data_weather = lake.clean_weather_data(weather_df)
+# merged_df = lake.merge_weather_data(cleaned_weather_df, cleaned_traffic_df)
+
+lake.upload_data(cleaned_data_weather, "silver", "cleaned_weather.parquet")
+lake.upload_data(cleaned_data_traffic, "silver", "cleaned_traffic.parquet")
+# lake.upload_data(merged_df, "silver", "merged_data.csv")
 lake.run_etl_pipeline()
